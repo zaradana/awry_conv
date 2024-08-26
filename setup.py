@@ -7,7 +7,7 @@ package_versions = [
 ]
 
 setup(
-    name="away_from_awry",
+    name="awry_conv",
     version="2024.08.26",
     install_requires=package_versions,
     include_package_data=True,
