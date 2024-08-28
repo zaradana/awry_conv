@@ -2,3 +2,5 @@ convokit
 transformers
 datasets
 torch-lr-finder
+torch
+accelerate
