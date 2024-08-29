@@ -4,6 +4,7 @@ import torch
 from datasets import Dataset
 from utils.utils import tokenize_function   
 from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments, AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
 import logging
 
@@ -24,9 +25,11 @@ class CustomTrainer(Trainer):
         loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
         return (loss, outputs) if return_outputs else loss
 
-    def create_optimizer(self):
-        optimizer = AdamW(self.model.parameters(), lr=self.args.learning_rate)
-        return optimizer
+    def create_optimizer_and_scheduler(self, num_training_steps: int):
+        self.optimizer = AdamW(self.model.parameters(), lr=self.args.learning_rate)
+        self.lr_scheduler = CosineAnnealingLR(self.optimizer, T_max=num_training_steps)
+
+
 
 def compute_metrics(pred):
     labels = pred.label_ids
@@ -77,12 +80,13 @@ def main():
     training_args = TrainingArguments(
         output_dir=args.output_dir+"_chpts",
         evaluation_strategy='epoch',
-        learning_rate=2e-5,
-        per_device_train_batch_size=8,
-        per_device_eval_batch_size=8,
+        learning_rate=1e-4,
+        per_device_train_batch_size=32,
+        per_device_eval_batch_size=64,
         num_train_epochs=4,
         weight_decay=0.01,
     )
+
 
     trainer = CustomTrainer(
         model=model,
