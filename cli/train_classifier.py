@@ -1,8 +1,10 @@
 import pandas as pd
+import os
+import torch 
 from datasets import Dataset
-from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
+from utils.utils import tokenize_function   
+from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments, AdamW
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, roc_auc_score
-from sklearn.model_selection import train_test_split
 import logging
 
 logging.basicConfig(
@@ -13,13 +15,25 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+class CustomTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        logits = outputs.logits
+        loss_fct = torch.nn.CrossEntropyLoss()
+        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
+        return (loss, outputs) if return_outputs else loss
+
+    def create_optimizer(self):
+        optimizer = AdamW(self.model.parameters(), lr=self.args.learning_rate)
+        return optimizer
 
 def compute_metrics(pred):
     labels = pred.label_ids
     preds = pred.predictions.argmax(-1)
     accuracy = accuracy_score(labels, preds)
     precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
-    roc_auc = roc_auc_score(labels, pred.predictions[:, 1])  # Assuming binary classification with probability outputs
+    roc_auc = roc_auc_score(labels, pred.predictions[:, 1])  
     return {
         'accuracy': accuracy,
         'precision': precision,
@@ -31,35 +45,34 @@ def compute_metrics(pred):
 def parse_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset-path", type=str, required=False, default="data/conversations-gone-awry-small.csv")
-    parser.add_argument("--model-name", type=str, required=False, default="bert-base-cased")
-    parser.add_argument("--output-dir", type=str, required=False, default="model")
-    parser.add_argument("--col-label", type=str, required=False, default="goes_awry")
-    parser.add_argument("--col-text-a", type=str, required=False, default="text")
-    parser.add_argument("--col-text-b", type=str, required=False, default="reply")
+    parser.add_argument("--data-dir", type=str, required=False, default="./data", help="Directory containing the dataset files")
+    parser.add_argument("--train-dataset-path", type=str, required=False, default="conversations-gone-awry-train.csv", help="Path to the training dataset")
+    parser.add_argument("--eval-dataset-path", type=str, required=False, default="conversations-gone-awry-eval.csv", help="Path to the evaluation dataset")
+    parser.add_argument("--model-name", type=str, required=False, default="bert-base-cased", help="Model name")
+    parser.add_argument("--output-dir", type=str, required=False, default="model", help="Output directory")
+    parser.add_argument("--col-label", type=str, required=False, default="goes_awry", help="Column name for the label")
+    parser.add_argument("--col-text-a", type=str, required=False, default="text", help="Column name for the text_a")
+    parser.add_argument("--col-text-b", type=str, required=False, default="reply", help="Column name for the text_b")
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    df = pd.read_csv(args.dataset_path)
+    train_dataset_path = os.path.join(args.data_dir, args.train_dataset_path)
+    eval_dataset_path = os.path.join(args.data_dir, args.eval_dataset_path)
+    train_df = pd.read_csv(train_dataset_path)
+    eval_df = pd.read_csv(eval_dataset_path)
 
-    # Ensure the label column is correctly named
-    df = df.rename(columns={args.col_label: 'label', args.col_text_a: 'text_a', args.col_text_b: 'text_b'})
-    logger.info(f"df size: {df.shape}")
-
-    train_df, test_df = train_test_split(df, test_size=0.3, stratify=df['label'], random_state=42)
+    train_df = train_df.rename(columns={args.col_label: 'label', args.col_text_a: 'text_a', args.col_text_b: 'text_b'})
+    eval_df = eval_df.rename(columns={args.col_label: 'label', args.col_text_a: 'text_a', args.col_text_b: 'text_b'})
 
     train_dataset = Dataset.from_pandas(train_df[['text_a', 'text_b', 'label']])
-    test_dataset = Dataset.from_pandas(test_df[['text_a', 'text_b', 'label']])
+    eval_dataset = Dataset.from_pandas(eval_df[['text_a', 'text_b', 'label']])
 
     tokenizer = BertTokenizer.from_pretrained(args.model_name)
     model = BertForSequenceClassification.from_pretrained(args.model_name, num_labels=2)
 
-    def tokenize_function(examples):
-        return tokenizer(examples['text_a'], examples['text_b'], padding='max_length', truncation=True)
-
-    train_dataset = train_dataset.map(tokenize_function, batched=True)
-    test_dataset = test_dataset.map(tokenize_function, batched=True)
+    train_dataset = train_dataset.map(tokenize_function, batched=True, fn_kwargs={"tokenizer": tokenizer})
+    eval_dataset = eval_dataset.map(tokenize_function, batched=True, fn_kwargs={"tokenizer": tokenizer})
 
     training_args = TrainingArguments(
         output_dir=args.output_dir+"_chpts",
@@ -69,14 +82,13 @@ def main():
         per_device_eval_batch_size=8,
         num_train_epochs=4,
         weight_decay=0.01,
-
     )
 
-    trainer = Trainer(
+    trainer = CustomTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=test_dataset,
+        eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
     )
 
