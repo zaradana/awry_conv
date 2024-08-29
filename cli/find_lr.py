@@ -70,8 +70,8 @@ def main():
     train_dataset = train_dataset.map(tokenize_function, batched=True, fn_kwargs={"tokenizer": tokenizer})
     eval_dataset = eval_dataset.map(tokenize_function, batched=True, fn_kwargs={"tokenizer": tokenizer})
     
-    train_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'label'])
-    eval_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'label'])
+    train_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'token_type_ids', 'label'])
+    eval_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'token_type_ids', 'label'])
 
     criterion = torch.nn.CrossEntropyLoss()
 
