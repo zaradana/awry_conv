@@ -74,14 +74,14 @@ def main():
 
     criterion = torch.nn.CrossEntropyLoss()
 
-    optimizer = AdamW(model.parameters(), lr=0.1)
+    optimizer = AdamW(model.parameters(), lr=1e-7, weight_decay=1e-2)
 
     trainloader = torch.utils.data.DataLoader(train_dataset, batch_size=32, shuffle=True, collate_fn=lambda x: custom_collate_fn(x, device))
     eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=32, shuffle=False, collate_fn=lambda x: custom_collate_fn(x, device))
 
     lr_finder = BertLRFinder(model, optimizer, criterion, device=device)
 
-    lr_finder.range_test(trainloader, val_loader=eval_loader, end_lr=1, num_iter=100, step_mode="linear", non_blocking_transfer = False)
+    lr_finder.range_test(trainloader, val_loader=eval_loader, start_lr=1e-7, end_lr=1, num_iter=100, step_mode="exp", non_blocking_transfer = False)
 
     ax = lr_finder.plot(log_lr=False, suggest_lr=False)
     fig = ax.get_figure()  
