@@ -81,7 +81,7 @@ def main():
 
     lr_finder = BertLRFinder(model, optimizer, criterion, device=device)
 
-    lr_finder.range_test(trainloader, val_loader=eval_loader, start_lr=1e-7, end_lr=1, num_iter=100, step_mode="exp", non_blocking_transfer = False)
+    lr_finder.range_test(trainloader, val_loader=eval_loader, start_lr=1e-7, end_lr=100, num_iter=100, step_mode="exp", non_blocking_transfer = False)
 
     ax = lr_finder.plot(log_lr=False, suggest_lr=False)
     fig = ax.get_figure()  
