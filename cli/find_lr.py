@@ -21,8 +21,9 @@ def parse_args():
 def custom_collate_fn(batch, device):
     input_ids = torch.stack([item['input_ids'] for item in batch]).to(device)
     attention_mask = torch.stack([item['attention_mask'] for item in batch]).to(device)
+    token_type_ids = torch.stack([item['token_type_ids'] for item in batch]).to(device)
     labels = torch.tensor([item['label'] for item in batch]).to(device)
-    return {"input_ids": input_ids, "attention_mask": attention_mask}, labels
+    return {"input_ids": input_ids, "attention_mask": attention_mask, "token_type_ids": token_type_ids}, labels
     
 class BertLRFinder(LRFinder):
     def __init__(self, model, optimizer, criterion, device):
